@@ -278,4 +278,3 @@ for k in range(27):
     #
     # testacc = str(100 * float(correct_test) / num_test_instances)[0:6]
     # sio.savemat('matfiles/'+ testacc +'_still_prediction.mat', {'prediction_label': prediction_label})
-
