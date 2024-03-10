@@ -4,7 +4,12 @@ import torch.nn.functional as F
 
 def conv3x3(in_planes, out_planes, stride=1):
     """3x3 convolution with padding"""
-    return nn.Conv1d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
+    return nn.Conv1d(in_planes, out_planes, kernel_size=3, stride=stride,
+                     padding=1, bias=False)
+
+def conv1x1(in_planes, out_planes, stride=1):
+    """1x1 convolution"""
+    return nn.Conv1d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
 
 class BasicBlock(nn.Module):
     expansion = 1
@@ -13,7 +18,7 @@ class BasicBlock(nn.Module):
         super(BasicBlock, self).__init__()
         self.conv1 = conv3x3(inplanes, planes, stride)
         self.bn1 = nn.BatchNorm1d(planes)
-        self.relu = nn.PReLU(num_parameters=planes)
+        self.relu = nn.LeakyReLU(inplace=True)  # Changed to LeakyReLU
         self.conv2 = conv3x3(planes, planes)
         self.bn2 = nn.BatchNorm1d(planes)
         self.downsample = downsample
@@ -37,28 +42,33 @@ class BasicBlock(nn.Module):
 
         return out
 
-class PReLUNet(nn.Module):
-    def __init__(self, block, layers, num_classes=10):
-        super(PReLUNet, self).__init__()
-        self.inplanes = 64
-        self.conv1 = nn.Conv1d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn1 = nn.BatchNorm1d(64)
-        self.relu = nn.PReLU(64)
+class ResNet(nn.Module):
+    def __init__(self, block, layers, inchannel=1, num_classes=6):
+        super(ResNet, self).__init__()
+        self.inplanes = 128
+        self.conv1 = nn.Conv1d(inchannel, 128, kernel_size=7, stride=2, padding=3, bias=False)
+        self.bn1 = nn.BatchNorm1d(128)
+        self.relu = nn.LeakyReLU(inplace=True)  # Changed to LeakyReLU
         self.maxpool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0])
+        self.layer1 = self._make_layer(block, 128, layers[0], stride=1)
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-        self.avgpool = nn.AdaptiveAvgPool1d(1)
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
+        self.pool = nn.AdaptiveAvgPool1d(1)
+        self.ACTClassifier = nn.Sequential(
+            nn.Conv1d(512 * block.expansion, 512 * block.expansion, kernel_size=3, stride=1, padding=0, bias=False),
+            nn.BatchNorm1d(512 * block.expansion),
+            nn.LeakyReLU(inplace=True),  # Changed to LeakyReLU
+            nn.AdaptiveAvgPool1d(1),
+        )
+        self.act_fc = nn.Linear(512 * block.expansion, num_classes)
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
-                nn.Conv1d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False),
+                conv1x1(self.inplanes, planes * block.expansion, stride),
                 nn.BatchNorm1d(planes * block.expansion),
-                nn.PReLU(planes * block.expansion)
             )
 
         layers = []
@@ -75,13 +85,13 @@ class PReLUNet(nn.Module):
         x = self.relu(x)
         x = self.maxpool(x)
 
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+        c1 = self.layer1(x)
+        c2 = self.layer2(c1)
+        c3 = self.layer3(c2)
+        c4 = self.layer4(c3)
 
-        x = self.avgpool(x)
-        x = torch.flatten(x, 1)
-        x = self.fc(x)
+        act = self.pool(c4)
+        act = act.view(act.size(0), -1)
+        act1 = self.act_fc(act)
 
-        return x
+        return act1, x, c1, c2, c3, c4, act
