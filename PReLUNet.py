@@ -42,6 +42,7 @@ for k in range(27):
 
     # Training and evaluation loop
     # Training and evaluation loop
+    # Training and evaluation loop
     for epoch in range(num_epochs):
         net.train()
         for samples, labels in train_loader:
@@ -51,12 +52,15 @@ for k in range(27):
 
             # Adjust the size of the output tensor to match the target size
             target_size = labels.size(0)  # Get the size of the target tensor
-            outputs = outputs[0].repeat(target_size, 1)  # Repeat the output tensor to match the target size
+            outputs = outputs.repeat(target_size,
+                                     1)  # Repeat the output tensor along the first dimension to match the target size
 
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
         scheduler.step()
+
+        # Add code for calculating and printing accuracy here...
 
         # Add code for calculating and printing accuracy here...
 
